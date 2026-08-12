@@ -1,0 +1,13 @@
+[Unit]
+Description=Robogarage network bootstrap (known wifi or hotspot fallback)
+After=NetworkManager.service
+Wants=NetworkManager.service
+Before=robogarage-web.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/pi/wifi-ui/start-network.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
