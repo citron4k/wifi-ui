@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Настройка сети</title>
+<style>
+  :root{
+    --bg: #0f1613;
+    --surface: #171f1b;
+    --surface-2: #1f2924;
+    --line: #263129;
+    --text: #e7eee9;
+    --text-dim: #8fa095;
+    --accent: #58e39c;
+    --accent-dim: #2e7a54;
+    --warn: #e3a857;
+    --danger: #e36858;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Code", Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    display:flex;
+    justify-content:center;
+    min-height:100%;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+
+  .app{
+    width:100%;
+    max-width:480px;
+    min-height:100%;
+    display:flex;
+    flex-direction:column;
+    background:var(--bg);
+  }
+
+  /* ---- status bar ---- */
+  .statusbar{
+    position:sticky; top:0; z-index:5;
+    background:var(--surface);
+    border-bottom:1px solid var(--line);
+    padding:16px 18px 14px;
+    overflow:hidden;
+  }
+  .statusbar .sweep{
+    position:absolute; top:0; left:-30%; width:30%; height:2px;
+    background:linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity:0; 
+  }
+  .statusbar.scanning .sweep{
+    opacity:1;
+    animation:sweep 1.6s linear infinite;
+  }
+  @keyframes sweep{
+    from{left:-30%;}
+    to{left:100%;}
+  }
+  .status-row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .status-label{
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .status-value{
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--accent);
+    text-align:right;
+  }
+  .status-value.warn{color:var(--warn);}
+  .status-value.danger{color:var(--danger);}
+  .devicename{
+    font-size:19px;
+    font-weight:700;
+    letter-spacing:-0.01em;
+    margin:2px 0 10px;
+  }
+
+  /* ---- network list ---- */
+  .list-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 18px 8px;
+  }
+  .list-header h2{
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    font-weight:600;
+    margin:0;
+  }
+  .rescan{
+    background:none; border:1px solid var(--line); color:var(--text-dim);
+    font-family:var(--mono); font-size:11px; letter-spacing:0.06em;
+    padding:6px 10px; border-radius:6px; cursor:pointer;
+  }
+  .rescan:active{background:var(--surface-2);}
+
+  .networks{
+    list-style:none; margin:0; padding:0 12px 12px;
+    display:flex; flex-direction:column; gap:6px;
+    flex:1;
+  }
+  .net{
+    display:flex; align-items:center; gap:12px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:13px 14px;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .net:active{background:var(--surface-2);}
+  .net.connected{border-color:var(--accent-dim); background:#132018;}
+
+  .net-trace{
+    display:flex; align-items:flex-end; gap:2px; height:16px; flex-shrink:0; width:20px;
+  }
+  .net-trace i{
+    display:block; width:3px; background:var(--line); border-radius:1px;
+  }
+  .net-trace i:nth-child(1){height:25%;}
+  .net-trace i:nth-child(2){height:50%;}
+  .net-trace i:nth-child(3){height:75%;}
+  .net-trace i:nth-child(4){height:100%;}
+  .net-trace i.on{background:var(--accent);}
+  .net-trace i.on.weak{background:var(--warn);}
+
+  .net-body{flex:1; min-width:0;}
+  .net-ssid{
+    font-family:var(--mono); font-size:14.5px; color:var(--text);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .net-meta{
+    font-family:var(--mono); font-size:10.5px; color:var(--text-dim);
+    margin-top:2px; letter-spacing:0.04em;
+  }
+  .net-lock{color:var(--text-dim); font-size:13px; flex-shrink:0;}
+
+  .empty{
+    text-align:center; color:var(--text-dim); font-family:var(--mono);
+    font-size:12.5px; padding:40px 20px; letter-spacing:0.02em;
+  }
+
+  /* ---- bottom sheet ---- */
+  .backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,.55);
+    opacity:0; pointer-events:none; transition:opacity .18s ease;
+    z-index:9;
+  }
+  .backdrop.open{opacity:1; pointer-events:auto;}
+
+  .sheet{
+    position:fixed; left:0; right:0; bottom:0; z-index:10;
+    max-width:480px; margin:0 auto;
+    background:var(--surface);
+    border:1px solid var(--line); border-bottom:none;
+    border-radius:16px 16px 0 0;
+    padding:20px 20px calc(20px + env(safe-area-inset-bottom));
+    transform:translateY(100%);
+    transition:transform .22s cubic-bezier(.32,.72,0,1);
+  }
+  .sheet.open{transform:translateY(0);}
+  .sheet-handle{
+    width:36px; height:4px; background:var(--line); border-radius:2px;
+    margin:0 auto 16px;
+  }
+  .sheet-title{
+    font-family:var(--mono); font-size:15px; color:var(--text);
+    margin:0 0 3px; word-break:break-all;
+  }
+  .sheet-sub{
+    font-family:var(--mono); font-size:11px; color:var(--text-dim);
+    margin:0 0 18px; letter-spacing:0.04em;
+  }
+  .field{margin-bottom:16px;}
+  .field label{
+    display:block; font-size:11px; color:var(--text-dim);
+    letter-spacing:0.08em; text-transform:uppercase; margin-bottom:7px;
+  }
+  .pw-row{position:relative;}
+  .field input{
+    width:100%; background:var(--surface-2); border:1px solid var(--line);
+    color:var(--text); font-family:var(--mono); font-size:15px;
+    padding:12px 44px 12px 12px; border-radius:8px; outline:none;
+  }
+  .field input:focus{border-color:var(--accent-dim);}
+  .pw-toggle{
+    position:absolute; right:4px; top:4px; bottom:4px;
+    background:none; border:none; color:var(--text-dim);
+    font-family:var(--mono); font-size:10.5px; letter-spacing:0.05em;
+    padding:0 10px; cursor:pointer;
+  }
+  .sheet-actions{display:flex; gap:10px; margin-top:4px;}
+  .btn{
+    flex:1; padding:13px; border-radius:8px; border:1px solid var(--line);
+    font-family:var(--sans); font-size:14.5px; font-weight:600;
+    cursor:pointer; background:none; color:var(--text-dim);
+  }
+  .btn.primary{
+    background:var(--accent); border-color:var(--accent); color:#08130d;
+  }
+  .btn.primary:disabled{opacity:.5;}
+  .sheet-error{
+    font-family:var(--mono); font-size:12px; color:var(--danger);
+    margin:-6px 0 14px; display:none;
+  }
+  .sheet-error.show{display:block;}
+
+  /* ---- connecting overlay ---- */
+  .connecting-body{text-align:center; padding:6px 0 4px;}
+  .spinner{
+    width:34px; height:34px; margin:4px auto 16px;
+    border:2px solid var(--line); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="statusbar" id="statusbar">
+    <div class="sweep"></div>
+    <div class="devicename" id="deviceName">comitup-042</div>
+    <div class="status-row">
+      <span class="status-label">Статус</span>
+      <span class="status-value" id="statusValue">—</span>
+    </div>
+  </div>
+
+  <div class="list-header">
+    <h2>Доступные сети</h2>
+    <button class="rescan" id="rescanBtn" type="button">⟳ ПОВТОР</button>
+  </div>
+
+  <ul class="networks" id="networkList"></ul>
+  <div class="empty" id="emptyState" style="display:none;">СЕТИ НЕ НАЙДЕНЫ</div>
+
+</div>
+
+<div class="backdrop" id="backdrop"></div>
+
+<!-- password sheet -->
+<div class="sheet" id="pwSheet">
+  <div class="sheet-handle"></div>
+  <p class="sheet-title" id="pwSsid">SSID</p>
+  <p class="sheet-sub">ВВЕДИТЕ ПАРОЛЬ СЕТИ</p>
+  <div class="sheet-error" id="pwError">Не удалось подключиться. Проверьте пароль.</div>
+  <div class="field">
+    <label for="pwInput">Пароль</label>
+    <div class="pw-row">
+      <input id="pwInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button class="pw-toggle" id="pwToggle" type="button">ПОКАЗАТЬ</button>
+    </div>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn" id="pwCancel" type="button">Отмена</button>
+    <button class="btn primary" id="pwSubmit" type="button">Подключить</button>
+  </div>
+</div>
+
+<!-- connecting sheet -->
+<div class="sheet" id="connSheet">
+  <div class="sheet-handle"></div>
+  <div class="connecting-body">
+    <div class="spinner" id="connSpinner"></div>
+    <p class="sheet-title" id="connTitle" style="text-align:center;">Подключение…</p>
+    <p class="sheet-sub" id="connSub" style="text-align:center;">К СЕТИ «SSID»</p>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn" id="connClose" type="button" style="display:none;">Закрыть</button>
+  </div>
+</div>
+
+<script>
+
+const API = {
+  status: '/api/status',
+  networks: '/api/networks',
+  connect: '/api/connect',
+  rescan: '/api/rescan',
+};
+
+const MOCK = {
+  status: { state: 'hotspot', device_name: 'comitup-042', ssid: null, ip: null, message: '' },
+  networks: [
+    { ssid: 'ROBOGARAGE-5G', signal: 92, secured: true },
+    { ssid: 'MTS-WIFI-4471', signal: 61, secured: true },
+    { ssid: 'FreePublicWifi', signal: 38, secured: false },
+    { ssid: 'iPhone11', signal: 21, secured: true },
+  ],
+};
+let usingMock = false;
+
+const el = {
+  statusbar: document.getElementById('statusbar'),
+  statusValue: document.getElementById('statusValue'),
+  deviceName: document.getElementById('deviceName'),
+  list: document.getElementById('networkList'),
+  empty: document.getElementById('emptyState'),
+  rescanBtn: document.getElementById('rescanBtn'),
+  backdrop: document.getElementById('backdrop'),
+  pwSheet: document.getElementById('pwSheet'),
+  pwSsid: document.getElementById('pwSsid'),
+  pwInput: document.getElementById('pwInput'),
+  pwToggle: document.getElementById('pwToggle'),
+  pwCancel: document.getElementById('pwCancel'),
+  pwSubmit: document.getElementById('pwSubmit'),
+  pwError: document.getElementById('pwError'),
+  connSheet: document.getElementById('connSheet'),
+  connTitle: document.getElementById('connTitle'),
+  connSub: document.getElementById('connSub'),
+  connSpinner: document.getElementById('connSpinner'),
+  connClose: document.getElementById('connClose'),
+};
+
+let currentSsid = null;
+let currentSecured = false;
+let pollTimer = null;
+
+async function api(url, opts) {
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) throw new Error('bad status ' + res.status);
+    usingMock = false;
+    return await res.json();
+  } catch (e) {
+    usingMock = true;
+    return null;
+  }
+}
+
+function signalBars(signal) {
+  const n = signal >= 75 ? 4 : signal >= 50 ? 3 : signal >= 25 ? 2 : 1;
+  const weak = signal < 50;
+  let html = '';
+  for (let i = 0; i < 4; i++) {
+    html += `<i class="${i < n ? 'on' + (weak ? ' weak' : '') : ''}"></i>`;
+  }
+  return html;
+}
+
+function renderNetworks(nets) {
+  el.list.innerHTML = '';
+  el.empty.style.display = nets.length ? 'none' : 'block';
+  nets.forEach(net => {
+    const li = document.createElement('li');
+    li.className = 'net' + (net.ssid === currentSsid ? ' connected' : '');
+    li.innerHTML = `
+      <div class="net-trace">${signalBars(net.signal)}</div>
+      <div class="net-body">
+        <div class="net-ssid">${escapeHtml(net.ssid)}</div>
+        <div class="net-meta">${net.signal}%${net.ssid === currentSsid ? ' · ПОДКЛЮЧЕНО' : ''}</div>
+      </div>
+      <div class="net-lock">${net.secured ? '🔒' : ''}</div>
+    `;
+    li.addEventListener('click', () => openPasswordSheet(net));
+    el.list.appendChild(li);
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderStatus(status) {
+  el.deviceName.textContent = status.device_name || 'устройство';
+  currentSsid = status.ssid;
+
+  const map = {
+    hotspot:    { text: 'ОЖИДАНИЕ ВЫБОРА СЕТИ', cls: '' },
+    scanning:   { text: 'ПОИСК СЕТЕЙ…', cls: '' },
+    connecting: { text: 'ПОДКЛЮЧЕНИЕ…', cls: 'warn' },
+    connected:  { text: `ПОДКЛЮЧЕНО · ${status.ip || ''}`, cls: '' },
+    failed:     { text: 'ОШИБКА ПОДКЛЮЧЕНИЯ', cls: 'danger' },
+  };
+  const s = map[status.state] || { text: status.state.toUpperCase(), cls: '' };
+  el.statusValue.textContent = s.text;
+  el.statusValue.className = 'status-value ' + s.cls;
+  el.statusValue.style.color = status.state === 'connected' ? 'var(--accent)' : '';
+
+  el.statusbar.classList.toggle('scanning', status.state === 'scanning');
+}
+
+async function loadNetworks() {
+  const data = await api(API.networks);
+  renderNetworks(data || MOCK.networks);
+}
+
+async function loadStatus() {
+  const data = await api(API.status);
+  renderStatus(data || MOCK.status);
+  return data || MOCK.status;
+}
+
+async function refreshAll() {
+  el.statusbar.classList.add('scanning');
+  await Promise.all([loadStatus(), loadNetworks()]);
+}
+
+/* ---- password sheet ---- */
+function openPasswordSheet(net) {
+  currentSecured = net.secured;
+  el.pwSsid.textContent = net.ssid;
+  el.pwInput.value = '';
+  el.pwInput.type = 'password';
+  el.pwToggle.textContent = 'ПОКАЗАТЬ';
+  el.pwError.classList.remove('show');
+  el.backdrop.classList.add('open');
+  el.pwSheet.classList.add('open');
+  el.pwSheet.dataset.ssid = net.ssid;
+  if (!net.secured) {
+    submitConnect(net.ssid, '');
+  } else {
+    setTimeout(() => el.pwInput.focus(), 250);
+  }
+}
+
+function closeSheets() {
+  el.backdrop.classList.remove('open');
+  el.pwSheet.classList.remove('open');
+  el.connSheet.classList.remove('open');
+}
+
+el.backdrop.addEventListener('click', closeSheets);
+el.pwCancel.addEventListener('click', closeSheets);
+el.pwToggle.addEventListener('click', () => {
+  const show = el.pwInput.type === 'password';
+  el.pwInput.type = show ? 'text' : 'password';
+  el.pwToggle.textContent = show ? 'СКРЫТЬ' : 'ПОКАЗАТЬ';
+});
+el.pwInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') el.pwSubmit.click();
+});
+
+el.pwSubmit.addEventListener('click', () => {
+  const ssid = el.pwSheet.dataset.ssid;
+  const pw = el.pwInput.value;
+  if (currentSecured && pw.length === 0) {
+    el.pwError.textContent = 'Введите пароль.';
+    el.pwError.classList.add('show');
+    return;
+  }
+  submitConnect(ssid, pw);
+});
+
+async function submitConnect(ssid, password) {
+  el.pwSheet.classList.remove('open');
+  el.backdrop.classList.add('open');
+  el.connSheet.classList.add('open');
+  el.connSpinner.style.display = 'block';
+  el.connClose.style.display = 'none';
+  el.connTitle.textContent = 'Подключение…';
+  el.connSub.textContent = `К СЕТИ «${ssid.toUpperCase()}»`;
+
+  if (usingMock) {
+    MOCK.status = { state: 'connecting', device_name: MOCK.status.device_name, ssid, ip: null, message: '' };
+    setTimeout(() => {
+      MOCK.status = { state: 'connected', device_name: MOCK.status.device_name, ssid, ip: '192.168.1.82', message: '' };
+    }, 2500);
+  } else {
+    await api(API.connect, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ssid, password }),
+    });
+  }
+
+  pollConnectStatus();
+}
+
+function pollConnectStatus() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    const status = await loadStatus();
+    if (status.state === 'connected') {
+      clearInterval(pollTimer);
+      el.connSpinner.style.display = 'none';
+      el.connTitle.textContent = 'Подключено';
+      el.connSub.textContent = `IP: ${status.ip || '—'}`;
+      el.connClose.style.display = 'block';
+    } else if (status.state === 'failed') {
+      clearInterval(pollTimer);
+      el.connSheet.classList.remove('open');
+      el.pwSheet.classList.add('open');
+      el.pwError.textContent = status.message || 'Не удалось подключиться. Проверьте пароль.';
+      el.pwError.classList.add('show');
+    }
+  }, 1500);
+}
+
+el.connClose.addEventListener('click', () => {
+  closeSheets();
+  refreshAll();
+});
+
+el.rescanBtn.addEventListener('click', async () => {
+  el.statusbar.classList.add('scanning');
+  await api(API.rescan, { method: 'POST' });
+  await refreshAll();
+});
+
+/* ---- init + light polling while idle ---- */
+refreshAll();
+setInterval(() => {
+  if (!el.pwSheet.classList.contains('open') && !el.connSheet.classList.contains('open')) {
+    loadStatus();
+  }
+}, 6000);
+</script>
+</body>
+</html>
